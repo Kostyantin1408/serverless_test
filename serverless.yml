@@ -1,0 +1,68 @@
+org: kostya717
+app: learning
+service: learning
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action:
+        - dynamodb:Scan
+        - dynamodb:PutItem
+        - dynamodb:GetItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource: "arn:aws:dynamodb:us-east-1:582174593134:table/posts-dev"
+
+functions:
+  description:
+    handler: handler.description
+    events:
+      - http:
+          path: /
+          method: get
+      - http:
+          path: /description
+          method: get
+  get_posts:
+    handler: handler.get_posts
+    events:
+      - http:
+          path: /posts
+          method: get
+      - http:
+          path: /post/{title}
+          method: get
+  add_post:
+    handler: handler.add_post
+    events:
+      - http:
+          path: /add_post
+          method: post
+  edit_posts:
+    handler: handler.edit_posts
+    events:
+      - http:
+          path: /edit_posts/{title}
+          method: put
+  delete_post:
+    handler: handler.delete_post
+    events:
+      - http:
+          path: /delete_post/{title}
+          method: delete
+
+resources:
+  Resources:
+    UserPostsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: posts-dev
+        AttributeDefinitions:
+          - AttributeName: title
+            AttributeType: S
+        KeySchema:
+          - AttributeName: title
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
