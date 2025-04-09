@@ -1,11 +1,11 @@
 # Posts console app
 ## To observe the description use:
 ```
-https://do1j23q5y6.execute-api.us-east-1.amazonaws.com/dev/
+curl https://do1j23q5y6.execute-api.us-east-1.amazonaws.com/dev/
 ```
 or 
 ```
-https://do1j23q5y6.execute-api.us-east-1.amazonaws.com/dev/description
+curl https://do1j23q5y6.execute-api.us-east-1.amazonaws.com/dev/description
 ```
 
 ## To add new post use:
@@ -19,13 +19,13 @@ or use postman, as you prefer.
 
 ## To observe exect post use:
 ```
-https://do1j23q5y6.execute-api.us-east-1.amazonaws.com/dev/post/Autumn
+curl https://do1j23q5y6.execute-api.us-east-1.amazonaws.com/dev/post/Autumn
 ```
 or any other name of the post, you've created. Take into account, use %20 if spaces present in title.
 
 ## To observe all posts use:
 ```
-https://do1j23q5y6.execute-api.us-east-1.amazonaws.com/dev/posts
+curl https://do1j23q5y6.execute-api.us-east-1.amazonaws.com/dev/posts
 ```
 
 ## To change already existing post:
