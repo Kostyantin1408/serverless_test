@@ -15,7 +15,14 @@ provider:
         - dynamodb:GetItem
         - dynamodb:UpdateItem
         - dynamodb:DeleteItem
-      Resource: "arn:aws:dynamodb:us-east-1:582174593134:table/posts-dev"
+        - dynamodb:Query
+        - events:PutEvents          
+        - events:DescribeEventBus   
+        - events:ListEventBuses      
+        - events:ListRules       
+        - events:DescribeRule          
+        - events:ListTargetsByRule  
+      Resource: "*"
 
 functions:
   description:
@@ -34,7 +41,7 @@ functions:
     handler: handler.get_unique_post
     events:
       - http:
-          path: /post/{title}
+          path: /post/{category}/{title}
           method: get
   add_post:
     handler: handler.add_post
@@ -46,29 +53,75 @@ functions:
     handler: handler.edit_posts
     events:
       - http:
-          path: /edit_posts/{title}
+          path: /edit_posts/{category}/{title}
           method: put
   delete_post:
     handler: handler.delete_post
     events:
       - http:
-          path: /delete_post/{title}
+          path: /delete_post/{category}/{title}
           method: delete
           authorizer: user_authorizer
   user_authorizer:
     handler: handler.user_authorizer
+  new_post_event_listener:
+    handler: handler.new_post_event_listener
+    events:
+      - eventBridge:
+          pattern: 
+            source:
+                - "com.mycompany.category.new_post" 
+            detail-type:
+                - "post_created"
+  get_posts_by_category:
+    handler: handler.get_posts_by_category
+    events:
+      - http:
+          path: /posts/{category}
+          method: get
+  get_info_by_categories:
+    handler: handler.get_info_by_categories
+    events:
+      - http:
+          path: /category_info
+          method: get
+  delete_post_event_listener:
+    handler: handler.delete_post_event_listener
+    events:
+      - eventBridge:
+          pattern: 
+            source:
+                - "com.mycompany.category.new_post" 
+            detail-type:
+                - "post_deleted"
 
 
 resources:
   Resources:
-    UserPostsTable:
+    PostsWithCategories:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: posts-dev
+        TableName: posts_with_categories
         AttributeDefinitions:
+          - AttributeName: category
+            AttributeType: S
           - AttributeName: title
             AttributeType: S
         KeySchema:
+          - AttributeName: category
+            KeyType: HASH
           - AttributeName: title
+            KeyType: RANGE
+        BillingMode: PAY_PER_REQUEST
+    CategoriesCounter:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: category_counter
+        AttributeDefinitions:
+          - AttributeName: category
+            AttributeType: S
+        KeySchema:
+          - AttributeName: category
             KeyType: HASH
         BillingMode: PAY_PER_REQUEST
+

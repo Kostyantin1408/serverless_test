@@ -1,17 +1,21 @@
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, GetCommand,
   PutCommand, UpdateCommand,
-  DeleteCommand, ScanCommand } = require("@aws-sdk/lib-dynamodb");
+  DeleteCommand, ScanCommand, QueryCommand} = require("@aws-sdk/lib-dynamodb");
+const { EventBridgeClient, PutEventsCommand } = require("@aws-sdk/client-eventbridge");
 
 
+const eventBridge = new EventBridgeClient({ region: 'us-east-1' });
 const client = new DynamoDBClient({ region: "us-east-1" });
 const docClient = DynamoDBDocumentClient.from(client);
 
+const TABLE_NAME = "posts_with_categories";
+const CATEGORIES_COUNTER_TABLE = "category_counter";
 
 
-const getAllPosts = async () => {
+const getAllEntries = async (table_name) => {
   const command = new ScanCommand({
-    TableName: "posts-dev",
+    TableName: table_name,
   });
 
   try {
@@ -37,10 +41,10 @@ const getAllPosts = async () => {
   }
 };
 
-const getGivenPost = async (title) => {
+const getGivenPost = async (category, title) => {
   const command = new GetCommand({
-    TableName: "posts-dev",
-    Key: { title: title },
+    TableName: TABLE_NAME,
+    Key: { category: category, title: title },
   })
 
   try {
@@ -73,7 +77,7 @@ const getGivenPost = async (title) => {
 };
 
 const addPost = async (data) => {
-  if (!data.title || !data.post_text) {
+  if (!data.title || !data.post_text || !data.category) {
     return {
       statusCode: 400,
       headers: { "Content-Type": "application/json" },
@@ -83,16 +87,36 @@ const addPost = async (data) => {
     };
   }
 
+  const eventDetail = {
+    category: data.category
+  };
+
+  const params = {
+    Entries: [
+      {
+        Source: 'com.mycompany.category.new_post',
+        DetailType: 'post_created',
+        Detail: JSON.stringify(eventDetail),
+        EventBusName: 'default'
+      }
+    ]
+  };
+
+  const eventCommand = new PutEventsCommand(params);
+  
+
   const command = new PutCommand({
-    TableName: "posts-dev",
+    TableName: TABLE_NAME,
     Item: {
+      category: data.category,
       title: data.title,
       post_text: data.post_text,
     },
   })
 
   try {
-    const result = await docClient.send(command);
+    await eventBridge.send(eventCommand);
+    await docClient.send(command);
     return {
       statusCode: 201,
       headers: { "Content-Type": "application/json" },
@@ -111,14 +135,15 @@ const addPost = async (data) => {
   }
 };
 
-const editPost = async (title, data) => {
-  if (!data.hasOwnProperty("title")) {
+const editPost = async (category, title, data) => {
+  if (!data.hasOwnProperty("title") || !data.hasOwnProperty("category")) {
     data.title = title;
   }
 
   const command = new UpdateCommand({
-    TableName: "posts-dev",
+    TableName: TABLE_NAME,
     Key: {
+      category: category,
       title: title,
     },
     UpdateExpression: "SET post_text = :post_text",
@@ -148,16 +173,36 @@ const editPost = async (title, data) => {
   }
 };
 
-const deletePost = async (title) => {
+const deletePost = async (category, title) => {
+
+  const eventDetail = {
+    category: category
+  };
+
+  const params = {
+    Entries: [
+      {
+        Source: 'com.mycompany.category.new_post',
+        DetailType: 'post_deleted',
+        Detail: JSON.stringify(eventDetail),
+        EventBusName: 'default'
+      }
+    ]
+  };
+
+  const eventCommand = new PutEventsCommand(params);
+
 
   const command = new DeleteCommand({
-    TableName: "posts-dev",
+    TableName: TABLE_NAME,
     Key: {
+      category: category,
       title: title,
     },
   });
 
-  try {
+  try { 
+    await eventBridge.send(eventCommand);
     await docClient.send(command);
     return {
       statusCode: 200,
@@ -199,6 +244,77 @@ const generatePolicy = (principalId, effect, resource, context) => {
   return authResponse;
 };
 
+const getPostsByCategory = async (category) => {
+  const command = new QueryCommand({
+    TableName: "posts_with_categories",
+    KeyConditionExpression: "category = :category",
+    ExpressionAttributeValues: {
+      ":category": category,
+    },
+  });
+
+  try {
+    const result = await docClient.send(command);
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ posts: result.Items }),
+    };
+  } catch (error) {
+    console.error("DynamoDB Query Error:", error);
+    return {
+      statusCode: 500,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        error: "Could not query posts by category",
+        details: error.message,
+      }),
+    };
+  }
+}
+
+const increseCategoryCounter = async (category) => {
+  const command = new UpdateCommand({
+    TableName: CATEGORIES_COUNTER_TABLE,
+    Key: {
+      category: category,
+    },
+    UpdateExpression: "ADD category_counter :incr",
+    ExpressionAttributeValues: {
+      ":incr": 1, 
+    },
+    ReturnValues: "ALL_NEW",
+  });
+
+  try {
+    const result = await docClient.send(command);
+    console.log("Updated counter:", result);
+  } catch (error) {
+    console.error("Failed to update counter:", error);
+  }
+}
+
+const decreaseCategoryCounter = async (category) => {
+  const command = new UpdateCommand({
+    TableName: CATEGORIES_COUNTER_TABLE,
+    Key: {
+      category: category,
+    },
+    UpdateExpression: "ADD category_counter :incr",
+    ExpressionAttributeValues: {
+      ":incr": -1, 
+    },
+    ReturnValues: "ALL_NEW",
+  });
+
+  try {
+    const result = await docClient.send(command);
+    console.log("Updated counter:", result);
+  } catch (error) {
+    console.error("Failed to update counter:", error);
+  }
+}
+
 const unknownPathMessage = () => {
   return {
     statusCode: 404,
@@ -207,4 +323,6 @@ const unknownPathMessage = () => {
   }
 }
 
-module.exports = { getAllPosts, getGivenPost, addPost, editPost, deletePost, generatePolicy, unknownPathMessage  };
+module.exports = { getAllEntries, getGivenPost, addPost,
+   editPost, deletePost, generatePolicy, 
+   unknownPathMessage, getPostsByCategory, increseCategoryCounter, decreaseCategoryCounter };

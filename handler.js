@@ -1,7 +1,8 @@
-const { getAllPosts, getGivenPost,
+const { getAllEntries, getGivenPost,
         addPost, editPost, deletePost,
-        generatePolicy, unknownPathMessage } = require('./utils');
-
+        generatePolicy, unknownPathMessage, 
+        getPostsByCategory, increseCategoryCounter,
+        decreaseCategoryCounter } = require('./utils');
 
 module.exports.description = async (event) => {
   let method = event.httpMethod;
@@ -24,7 +25,7 @@ module.exports.get_posts = async (event) => {
   if (method !== "GET") return unknownPathMessage();
 
   if (path === "/posts") {
-    return getAllPosts();
+    return getAllEntries("posts_with_categories");
   } else {
     return unknownPathMessage();
   }
@@ -36,8 +37,9 @@ module.exports.get_unique_post = async (event) => {
   if (method !== "GET") return unknownPathMessage();
 
   if (event.pathParameters && event.pathParameters.title) {
+    let category = decodeURIComponent(event.pathParameters.category);
     let title = decodeURIComponent(event.pathParameters.title);
-    return getGivenPost(title);
+    return getGivenPost(category, title);
   }
 }
 
@@ -71,8 +73,9 @@ module.exports.edit_posts = async (event) => {
 
 
   if (event.pathParameters && event.pathParameters.title) {
+    let category = decodeURIComponent(event.pathParameters.category);
     let title = decodeURIComponent(event.pathParameters.title);
-    return editPost(title, JSON.parse(event.body));
+    return editPost(category, title, JSON.parse(event.body));
   } else {
     return unknownPathMessage();
   }
@@ -85,11 +88,31 @@ module.exports.delete_post = async (event) => {
 
 
   if (event.pathParameters && event.pathParameters.title) {
+    let category = decodeURIComponent(event.pathParameters.category);
     let title = decodeURIComponent(event.pathParameters.title);
-    return deletePost(title);
+    return deletePost(category, title);
   } else {
     return unknownPathMessage();
   }
+}
+
+module.exports.get_posts_by_category = async (event) => {
+  let method = event.httpMethod;
+  if (method !== "GET") return unknownPathMessage();
+
+  if (event.pathParameters && event.pathParameters.category) {
+    let category = decodeURIComponent(event.pathParameters.category);
+    return getPostsByCategory(category);
+  } else {
+    return unknownPathMessage();
+  }
+}
+
+
+module.exports.get_info_by_categories = async (event) => {
+  let method = event.httpMethod;
+  if (method !== "GET") return unknownPathMessage();
+  return getAllEntries("category_counter");
 }
 
 
@@ -100,4 +123,14 @@ module.exports.user_authorizer = async (event) => {
     return generatePolicy("anonymous", "Deny", event.methodArn);
   }
   return generatePolicy("user", "Allow", "*", { userId: "xxx" })
+}
+
+module.exports.new_post_event_listener = async (event, context) => {
+  const category = event.detail.category;
+  return increseCategoryCounter(category);
+}
+
+module.exports.delete_post_event_listener = async (event, context) => {
+  const category = event.detail.category;
+  return decreaseCategoryCounter(category);
 }
