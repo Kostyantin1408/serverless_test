@@ -1,20 +1,16 @@
-const { getAllPosts, getGivenPost, addPost, editPost, deletePost } = require('./utils');
+const { getAllPosts, getGivenPost,
+        addPost, editPost, deletePost,
+        generatePolicy, unknownPathMessage } = require('./utils');
 
 
 module.exports.description = async (event) => {
   let method = event.httpMethod;
 
-  if (method !== "GET") {
-    return {
-      statusCode: 405,
-      body: JSON.stringify({
-        message: "Sorry, you can observe description via GET!",
-      }),
-    };
-  }
+  if (method !== "GET") return unknownPathMessage();
 
   return {
     statusCode: 200,
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       message: "Hello! This is app for your blog! You can add posts here and observe them!",
     }),
@@ -25,25 +21,23 @@ module.exports.get_posts = async (event) => {
   let path = event.path;
   let method = event.httpMethod;
 
-  if (method !== "GET") {
-    return {
-      statusCode: 404,
-      body: JSON.stringify({
-      message: "Unknown path!",}),
-    }
+  if (method !== "GET") return unknownPathMessage();
+
+  if (path === "/posts") {
+    return getAllPosts();
+  } else {
+    return unknownPathMessage();
   }
+}
+
+module.exports.get_unique_post = async (event) => {
+  let method = event.httpMethod;
+
+  if (method !== "GET") return unknownPathMessage();
 
   if (event.pathParameters && event.pathParameters.title) {
     let title = decodeURIComponent(event.pathParameters.title);
     return getGivenPost(title);
-  } else if (method == "GET" && path === "/posts") {
-    return getAllPosts();
-  } else {
-    return {
-      statusCode: 404,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "Unknown path!" }),
-    };
   }
 }
 
@@ -58,17 +52,14 @@ module.exports.add_post = async (event) => {
       } else {
         return {
           statusCode: 405,
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
           message: "You can use /add_post only with POST method!",}),
         }
       }
       break;
     default:
-      return {
-        statusCode: 404,
-        body: JSON.stringify({
-        message: "Unknown path!",}),
-      }
+      return unknownPathMessage();
       break;
   }
 };
@@ -76,45 +67,37 @@ module.exports.add_post = async (event) => {
 module.exports.edit_posts = async (event) => {
   let method = event.httpMethod;
 
-  if (method !== "PUT") {
-    return {
-      statusCode: 405,
-      body: JSON.stringify({
-      message: "You can use /edit_posts only as PUT request!",}),
-    }
-  }
+  if (method !== "PUT") return unknownPathMessage();
+
 
   if (event.pathParameters && event.pathParameters.title) {
     let title = decodeURIComponent(event.pathParameters.title);
     return editPost(title, JSON.parse(event.body));
   } else {
-    return {
-      statusCode: 404,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "Unknown path!" }),
-    };
+    return unknownPathMessage();
   }
 }
 
 module.exports.delete_post = async (event) => {
   let method = event.httpMethod;
 
-  if (method !== "DELETE") {
-    return {
-      statusCode: 405,
-      body: JSON.stringify({
-      message: "You can use /delete_post only as DELETE request!",}),
-    }
-  }
+  if (method !== "DELETE") return unknownPathMessage();
+
 
   if (event.pathParameters && event.pathParameters.title) {
     let title = decodeURIComponent(event.pathParameters.title);
     return deletePost(title);
   } else {
-    return {
-      statusCode: 404,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "Unknown path!" }),
-    };
+    return unknownPathMessage();
   }
+}
+
+
+module.exports.user_authorizer = async (event) => {
+  const token = event.authorizationToken;
+
+  if (!token || token !== process.env.TOKEN) {
+    return generatePolicy("anonymous", "Deny", event.methodArn);
+  }
+  return generatePolicy("user", "Allow", "*", { userId: "xxx" })
 }

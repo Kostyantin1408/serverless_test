@@ -1,13 +1,21 @@
-const AWS = require("aws-sdk");
-const dynamoDb = new AWS.DynamoDB.DocumentClient();
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+const { DynamoDBDocumentClient, GetCommand,
+  PutCommand, UpdateCommand,
+  DeleteCommand, ScanCommand } = require("@aws-sdk/lib-dynamodb");
+
+
+const client = new DynamoDBClient({ region: "us-east-1" });
+const docClient = DynamoDBDocumentClient.from(client);
+
+
 
 const getAllPosts = async () => {
-  const params = {
+  const command = new ScanCommand({
     TableName: "posts-dev",
-  };
+  });
 
   try {
-    const result = await dynamoDb.scan(params).promise();
+    const result = await docClient.send(command);
 
     return {
       statusCode: 200,
@@ -30,13 +38,13 @@ const getAllPosts = async () => {
 };
 
 const getGivenPost = async (title) => {
-  const params = {
+  const command = new GetCommand({
     TableName: "posts-dev",
     Key: { title: title },
-  };
+  })
 
   try {
-    const result = await dynamoDb.get(params).promise();
+    const result = await docClient.send(command);
 
     if (!result.Item) {
       return {
@@ -75,16 +83,16 @@ const addPost = async (data) => {
     };
   }
 
-  const params = {
+  const command = new PutCommand({
     TableName: "posts-dev",
     Item: {
       title: data.title,
       post_text: data.post_text,
     },
-  };
+  })
 
   try {
-    await dynamoDb.put(params).promise();
+    const result = await docClient.send(command);
     return {
       statusCode: 201,
       headers: { "Content-Type": "application/json" },
@@ -107,7 +115,8 @@ const editPost = async (title, data) => {
   if (!data.hasOwnProperty("title")) {
     data.title = title;
   }
-  const params = {
+
+  const command = new UpdateCommand({
     TableName: "posts-dev",
     Key: {
       title: title,
@@ -117,11 +126,13 @@ const editPost = async (title, data) => {
       ":post_text": data.post_text,
     },
     ReturnValues: "ALL_NEW",
-  };
+  });
+
   try {
-    const result = await dynamoDb.update(params).promise();
+    const result = await docClient.send(command);
     return {
       statusCode: 200,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message: "Item updated",
         item: result.Attributes,
@@ -131,22 +142,26 @@ const editPost = async (title, data) => {
     console.error("Update failed:", error);
     return {
       statusCode: 500,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: "Failed to update item", error }),
     };
   }
 };
 
 const deletePost = async (title) => {
-  const params = {
+
+  const command = new DeleteCommand({
     TableName: "posts-dev",
     Key: {
       title: title,
     },
-  };
+  });
+
   try {
-    const result = await dynamoDb.delete(params).promise();
+    await docClient.send(command);
     return {
       statusCode: 200,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message: "Item deleted!",
       }),
@@ -155,9 +170,41 @@ const deletePost = async (title) => {
     console.error("Delete failed:", error);
     return {
       statusCode: 500,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: "Failed to delete item", error }),
     };
   }
 };
 
-module.exports = { getAllPosts, getGivenPost, addPost, editPost, deletePost };
+const generatePolicy = (principalId, effect, resource, context) => {
+  const authResponse = { principalId };
+
+  if (effect && resource) {
+    authResponse.policyDocument = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Action: "execute-api:Invoke",
+          Effect: effect,
+          Resource: resource,
+        },
+      ],
+    };
+  }
+
+  if (context) {
+    authResponse.context = context;
+  }
+
+  return authResponse;
+};
+
+const unknownPathMessage = () => {
+  return {
+    statusCode: 404,
+    body: JSON.stringify({
+    message: "Unknown path!",}),
+  }
+}
+
+module.exports = { getAllPosts, getGivenPost, addPost, editPost, deletePost, generatePolicy, unknownPathMessage  };

@@ -5,6 +5,8 @@ service: learning
 provider:
   name: aws
   runtime: nodejs20.x
+  environment:
+    TOKEN: 11111
   iamRoleStatements:
     - Effect: "Allow"
       Action:
@@ -22,15 +24,15 @@ functions:
       - http:
           path: /
           method: get
-      - http:
-          path: /description
-          method: get
   get_posts:
     handler: handler.get_posts
     events:
       - http:
           path: /posts
           method: get
+  get_unique_post:
+    handler: handler.get_unique_post
+    events:
       - http:
           path: /post/{title}
           method: get
@@ -52,6 +54,10 @@ functions:
       - http:
           path: /delete_post/{title}
           method: delete
+          authorizer: user_authorizer
+  user_authorizer:
+    handler: handler.user_authorizer
+
 
 resources:
   Resources:
