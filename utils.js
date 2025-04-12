@@ -10,7 +10,6 @@ const client = new DynamoDBClient({ region: "us-east-1" });
 const docClient = DynamoDBDocumentClient.from(client);
 
 const TABLE_NAME = "posts_with_categories";
-const CATEGORIES_COUNTER_TABLE = "category_counter";
 
 
 const getAllEntries = async (table_name) => {
@@ -41,16 +40,20 @@ const getAllEntries = async (table_name) => {
   }
 };
 
-const getGivenPost = async (category, title) => {
-  const command = new GetCommand({
+const getGivenPost = async (title) => {
+  const command = new QueryCommand({
     TableName: TABLE_NAME,
-    Key: { category: category, title: title },
-  })
+    IndexName: 'GSI1',
+    KeyConditionExpression: 'title = :title',
+    ExpressionAttributeValues: {
+      ':title': title
+    }
+  });
 
   try {
     const result = await docClient.send(command);
 
-    if (!result.Item) {
+    if (!result.Items) {
       return {
         statusCode: 404,
         headers: { "Content-Type": "application/json" },
@@ -61,7 +64,7 @@ const getGivenPost = async (category, title) => {
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ post: result.Item }),
+      body: JSON.stringify({ post: result.Items }),
     };
   } catch (error) {
     console.error("DynamoDB Get Error:", error);
@@ -115,6 +118,7 @@ const addPost = async (data) => {
   })
 
   try {
+    await addCategory(data);
     await eventBridge.send(eventCommand);
     await docClient.send(command);
     return {
@@ -246,7 +250,7 @@ const generatePolicy = (principalId, effect, resource, context) => {
 
 const getPostsByCategory = async (category) => {
   const command = new QueryCommand({
-    TableName: "posts_with_categories",
+    TableName: TABLE_NAME,
     KeyConditionExpression: "category = :category",
     ExpressionAttributeValues: {
       ":category": category,
@@ -275,9 +279,10 @@ const getPostsByCategory = async (category) => {
 
 const increseCategoryCounter = async (category) => {
   const command = new UpdateCommand({
-    TableName: CATEGORIES_COUNTER_TABLE,
+    TableName: TABLE_NAME,
     Key: {
       category: category,
+      title: "#"
     },
     UpdateExpression: "ADD category_counter :incr",
     ExpressionAttributeValues: {
@@ -296,9 +301,10 @@ const increseCategoryCounter = async (category) => {
 
 const decreaseCategoryCounter = async (category) => {
   const command = new UpdateCommand({
-    TableName: CATEGORIES_COUNTER_TABLE,
+    TableName: TABLE_NAME,
     Key: {
       category: category,
+      title: "#"
     },
     UpdateExpression: "ADD category_counter :incr",
     ExpressionAttributeValues: {
@@ -315,6 +321,72 @@ const decreaseCategoryCounter = async (category) => {
   }
 }
 
+const addCategory = async (data) => {
+  const command = new PutCommand({
+    TableName: TABLE_NAME,
+    Item: {
+      category: data.category,
+      title: "#",
+      category_counter: 0
+    },
+    ConditionExpression: "attribute_not_exists(category) AND attribute_not_exists(title)"
+  })
+
+  try {
+    await docClient.send(command);
+    return {
+      statusCode: 201,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Category added successfully",
+        post_info: data,
+      }),
+    };
+  } catch (error) {
+    console.error("DynamoDB Put Error:", error);
+    return {
+      statusCode: 500,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ error: "Could not create the post" }),
+    };
+  }
+}
+
+const getCategoryCounters = async () => {
+  const command = new ScanCommand({
+    TableName: TABLE_NAME,
+  });
+  try {
+    const result = await docClient.send(command);
+    let categories_counters = {};
+    for (let elem of result.Items) {
+      console.log(elem);
+      console.log(elem.title === "#");
+      if (elem.title === "#") {
+        categories_counters[elem.category] = elem.category_counter;
+      }
+    }
+
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        categories: categories_counters,
+      }),
+    };
+  } catch (error) {
+    console.error("DynamoDB Scan Error:", error);
+    return {
+      statusCode: 500,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        error: "Could not fetch items",
+        details: error.message,
+      }),
+    };
+  }
+}
+
 const unknownPathMessage = () => {
   return {
     statusCode: 404,
@@ -325,4 +397,5 @@ const unknownPathMessage = () => {
 
 module.exports = { getAllEntries, getGivenPost, addPost,
    editPost, deletePost, generatePolicy, 
-   unknownPathMessage, getPostsByCategory, increseCategoryCounter, decreaseCategoryCounter };
+   unknownPathMessage, getPostsByCategory, increseCategoryCounter, 
+   decreaseCategoryCounter, addCategory, getCategoryCounters  };

@@ -10,62 +10,52 @@ provider:
   iamRoleStatements:
     - Effect: "Allow"
       Action:
-        - dynamodb:Scan
-        - dynamodb:PutItem
-        - dynamodb:GetItem
-        - dynamodb:UpdateItem
-        - dynamodb:DeleteItem
-        - dynamodb:Query
-        - events:PutEvents          
-        - events:DescribeEventBus   
-        - events:ListEventBuses      
-        - events:ListRules       
-        - events:DescribeRule          
-        - events:ListTargetsByRule  
+        - dynamodb:*
+        - events:*
       Resource: "*"
 
 functions:
   description:
-    handler: handler.description
+    handler: services/description.description
     events:
       - http:
           path: /
           method: get
   get_posts:
-    handler: handler.get_posts
+    handler: services/posts/get_posts.get_posts
     events:
       - http:
           path: /posts
           method: get
   get_unique_post:
-    handler: handler.get_unique_post
+    handler: services/posts/get_unique_post.get_unique_post
     events:
       - http:
-          path: /post/{category}/{title}
+          path: /post/{title}
           method: get
   add_post:
-    handler: handler.add_post
+    handler: services/posts/add_post.add_post
     events:
       - http:
           path: /add_post
           method: post
   edit_posts:
-    handler: handler.edit_posts
+    handler: services/posts/edit_post.edit_posts
     events:
       - http:
           path: /edit_posts/{category}/{title}
           method: put
   delete_post:
-    handler: handler.delete_post
+    handler: services/posts/delete_post.delete_post
     events:
       - http:
           path: /delete_post/{category}/{title}
           method: delete
           authorizer: user_authorizer
   user_authorizer:
-    handler: handler.user_authorizer
+    handler: services/authorizer.user_authorizer
   new_post_event_listener:
-    handler: handler.new_post_event_listener
+    handler: services/event_listeners/new_post_listener.new_post_event_listener
     events:
       - eventBridge:
           pattern: 
@@ -74,19 +64,25 @@ functions:
             detail-type:
                 - "post_created"
   get_posts_by_category:
-    handler: handler.get_posts_by_category
+    handler: services/posts/get_posts_by_category.get_posts_by_category
     events:
       - http:
           path: /posts/{category}
           method: get
   get_info_by_categories:
-    handler: handler.get_info_by_categories
+    handler: services/categories/get_info_by_categories.get_info_by_categories
     events:
       - http:
           path: /category_info
           method: get
+  add_category:
+    handler: services/categories/add_category.add_category
+    events:
+      - http:
+          path: /add_category
+          method: post
   delete_post_event_listener:
-    handler: handler.delete_post_event_listener
+    handler: services/event_listeners/delete_post_listener.delete_post_event_listener
     events:
       - eventBridge:
           pattern: 
@@ -112,16 +108,11 @@ resources:
             KeyType: HASH
           - AttributeName: title
             KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: GSI1
+            KeySchema:
+              - AttributeName: title
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
         BillingMode: PAY_PER_REQUEST
-    CategoriesCounter:
-      Type: AWS::DynamoDB::Table
-      Properties:
-        TableName: category_counter
-        AttributeDefinitions:
-          - AttributeName: category
-            AttributeType: S
-        KeySchema:
-          - AttributeName: category
-            KeyType: HASH
-        BillingMode: PAY_PER_REQUEST
-
